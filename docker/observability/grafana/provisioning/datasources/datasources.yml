@@ -1,0 +1,45 @@
+# Grafana datasource provisioning. Prometheus is added in Phase 5; Loki (logs,
+# Phase 6) and Tempo (traces, Phase 7) are appended here as those phases land,
+# with trace<->log<->metric correlation wired via matching labels/derived fields.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      maxLines: 1000
+      # a traceId in a JSON log line becomes a clickable link into Tempo
+      derivedFields:
+        - name: traceId
+          matcherType: label
+          matcherRegex: traceId
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # from a span, jump to the correlated logs in Loki by traceId
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: true
+        tags: [{ key: 'application', value: 'application' }]
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true

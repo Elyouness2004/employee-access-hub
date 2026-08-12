@@ -1,0 +1,5 @@
+# Ship only what the build stage COPYs (pom.xml + src). Everything else —
+# target/ above all — bloats the context and busts the dependency layer cache.
+*
+!pom.xml
+!src

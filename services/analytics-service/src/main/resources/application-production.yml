@@ -1,0 +1,27 @@
+# Production profile (SPRING_PROFILES_ACTIVE=production): operational behavior only —
+# graceful shutdown, terse logging. No datasource block: analytics is a
+# READ-ONLY REST aggregator by design. Business config stays in application.yml.
+server:
+  shutdown: graceful
+  # bounded worker pool sized for a small single-VM deployment
+  tomcat:
+    threads:
+      max: 100
+      min-spare: 10
+    accept-count: 100
+    max-connections: 2000
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+logging:
+  level:
+    root: INFO
+    com.hub: INFO
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

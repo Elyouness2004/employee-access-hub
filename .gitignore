@@ -1,0 +1,131 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Secrets — never committed. The *.example files ARE committed: they are the
+# environment contract and contain placeholders only (see SECURITY.md).
+# ─────────────────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.staging
+.env.production
+!.env.example
+!.env.staging.example
+!.env.production.example
+
+# TLS material and any other key/certificate bytes
+*.pem
+*.key
+*.p12
+*.jks
+*.pfx
+*.crt
+*.cer
+docker/nginx/certs/
+
+# Database dumps and backups (may contain personal data)
+*.sql.gz
+*.dump
+backups/
+
+# Deployment runtime state (release ledger written by docker/scripts/deploy.sh)
+.deploy/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Build output
+# ─────────────────────────────────────────────────────────────────────────────
+# Java / Maven
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# Node / Vite (web-portal also carries its own .gitignore)
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+
+# Test and coverage reports
+coverage/
+.nyc_output/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IDE / editor
+# ─────────────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+*~
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OS
+# ─────────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Local runtime artifacts
+# ─────────────────────────────────────────────────────────────────────────────
+# Keycloak distribution + logs downloaded by docker/scripts/e2e-local.sh
+.local/
+*.log
+logs/
+tmp/
+temp/
+
+# Python (docker/seed)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOCAL-ONLY project material.
+#
+# These files stay on this machine. They are NOT deleted and NOT archived — they
+# are simply kept out of the GitHub repository, which carries only what another
+# developer needs to clone, understand, run, test and deploy the application.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Agent tooling and instructions — local development assistance only
+.claude/
+
+# Retired material kept for local history
+archive/
+
+# Project management: roadmap, task breakdown, progress tracker
+docs/development/Roadmap.md
+docs/development/Tasks.md
+docs/development/Todo.md
+
+# Planning package — milestones, backlog, sprint plan, traceability
+docs/planning/
+
+# Dated phase and day reports — historical development records
+docs/reports/
+
+# Diagram production working documents and the internship-report guide
+docs/diagrams/ARCHITECTURE_INVENTORY.md
+docs/diagrams/DIAGRAM_PLAN.md
+docs/diagrams/DIAGRAM_VERIFICATION.md
+docs/diagrams/REPORT_DIAGRAM_GUIDE.md
+docs/diagrams/06-gantt.puml
+
+# Rendered PNGs (23 MB). The .puml sources and the .svg renders are committed;
+# SVG is vector, renders on GitHub, and is ~40x smaller. Regenerate the PNGs
+# locally with docs/diagrams/render.sh.
+docs/diagrams/rendered/**/*.png
+
+# Historical greenfield analysis and frontend build order — superseded for a
+# newcomer by docs/api/api-conventions.md and the frontend architecture/spec.
+docs/frontend/FRONTEND-DISCOVERY.md
+docs/frontend/FRONTEND-ROADMAP.md
+docs/
+web-portal/.env.development
+.env
+.env.*

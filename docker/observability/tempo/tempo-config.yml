@@ -1,0 +1,44 @@
+# Tempo single-binary config for the observability stack. Receives spans over
+# OTLP (gRPC 4317 / HTTP 4318) from the services and stores them on the local
+# filesystem. Grafana queries it and links traces <-> logs <-> metrics.
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+ingester:
+  max_block_duration: 5m
+
+compactor:
+  compaction:
+    block_retention: 168h   # 7 days, matches Loki
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+# expose Tempo's own metrics to Prometheus and enable the metrics-generator so
+# service-graph / span-metrics are available in Grafana
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+overrides:
+  metrics_generator_processors: [service-graphs, span-metrics]

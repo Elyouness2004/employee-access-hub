@@ -1,0 +1,32 @@
+# Production profile (SPRING_PROFILES_ACTIVE=production): operational behavior
+# only — graceful shutdown, fail-fast required env, terse logging. Business
+# config stays in application.yml.
+server:
+  shutdown: graceful
+  # behind the nginx TLS proxy (Phase 9): honor X-Forwarded-* so the
+  # gateway sees the real scheme/host/client IP
+  forward-headers-strategy: native
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  cloud:
+    gateway:
+      server:
+        webflux:
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                # no default on purpose: production must declare its real origins
+                allowedOrigins: ${HUB_CORS_ALLOWED_ORIGINS}
+
+logging:
+  level:
+    root: INFO
+    com.hub: INFO
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

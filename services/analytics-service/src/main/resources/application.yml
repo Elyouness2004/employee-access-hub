@@ -1,0 +1,64 @@
+server:
+  port: 9005
+
+spring:
+  application:
+    name: analytics-service
+  # No datasource on purpose: analytics is a READ-ONLY aggregator and never
+  # touches another service's database — it only calls their internal REST APIs.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # issuer as it appears in tokens (host-facing URL)
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/employee-hub}
+          # optional override for container networking (keys fetched internally,
+          # issuer claim still validated against issuer-uri)
+          jwk-set-uri: ${KEYCLOAK_JWKS_URI:}
+  cloud:
+    openfeign:
+      client:
+        config:
+          # timeouts (P6.3): a slow source must not hold an analytics request open
+          default:
+            connect-timeout: 2000
+            read-timeout: 2000
+
+hub:
+  security:
+    audience: hub-api
+  sources:
+    hr-url: ${HR_SERVICE_URI:http://localhost:9001}
+    leave-url: ${LEAVE_SERVICE_URI:http://localhost:9002}
+    expense-url: ${EXPENSE_SERVICE_URI:http://localhost:9003}
+    documents-url: ${DOCUMENTS_SERVICE_URI:http://localhost:9004}
+    # response cache (fresh) short-circuits the source for its TTL; the longer
+    # stale tier is served ONLY while a source is unreachable (P6.3 degradation).
+    snapshot-cache-ttl: 1m
+    stale-snapshot-ttl: 1h
+    circuit-breaker:
+      sliding-window-size: 10
+      minimum-number-of-calls: 4
+      failure-rate-threshold: 50
+      wait-duration-in-open-state: 10s
+
+management:
+  # per-service tag so Prometheus/Grafana can slice metrics by application
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  # Distributed tracing (Phase 7). Sampling defaults to 0.0 so tests and the dev
+  # stack create/export nothing; the observability overlay and staging/production
+  # raise it and point OTLP at Tempo.
+  tracing:
+    sampling:
+      probability: ${HUB_TRACING_SAMPLING:0.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  endpoints:
+    web:
+      exposure:
+        # prometheus + metrics scraped on the backend network only (not routed
+        # by the gateway, not publicly reachable)
+        include: health,info,prometheus,metrics

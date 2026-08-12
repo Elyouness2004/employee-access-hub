@@ -1,0 +1,212 @@
+@import './tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Global styling foundation — DESIGN-SYSTEM §3 (type), §7 (motion), §8 (focus).
+ * Components never restate these rules; they inherit them.
+ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    height: 100%;
+    text-size-adjust: 100%;
+
+    /* Focus must never end up under the sticky chrome (WCAG 2.2 "focus not
+       obscured"): scrolling an element into view stops short by the height of
+       everything pinned to the top. The 56px top bar is permanent; components
+       that pin something below it (the session-expiry bar) raise
+       --sticky-offset while they are mounted. */
+    --sticky-offset: 0px;
+
+    scroll-padding-top: calc(56px + var(--sticky-offset));
+  }
+
+  body {
+    margin: 0;
+    min-height: 100%;
+    background-color: var(--canvas);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 22px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Amounts, counts, and timestamps are always tabular (§3.2). Applied globally
+     so numbers align even where a component forgets the utility. */
+  body {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  dl,
+  dd,
+  figure {
+    margin: 0;
+  }
+
+  ul,
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  /* Links are ink + underline — never blue (§2.2). Components that render
+     navigation (sidebar, menus) opt out explicitly. */
+  a {
+    color: var(--link);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* Form controls inherit the product typography. */
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  button {
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  /* Focus is visible on EVERYTHING, never removed, never restyled per
+     component: 2px ring, offset 2px (§8). */
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--action-primary);
+    color: var(--action-primary-text);
+  }
+
+  img,
+  svg {
+    display: block;
+    max-width: 100%;
+  }
+}
+
+@layer utilities {
+  /* On the graphite control rail the ink focus ring would vanish — re-map the
+     focus token locally so :focus-visible stays visible (WCAG 2.2). */
+  .on-dark-rail {
+    --focus-ring: var(--sidebar-text-strong);
+  }
+
+  /* Skeleton shimmer (§2.6) — 1.6s linear; collapses to a static block under
+     prefers-reduced-motion. */
+  .skeleton-shimmer {
+    background-color: var(--skeleton-base);
+    background-image: linear-gradient(
+      90deg,
+      var(--skeleton-base) 0%,
+      var(--skeleton-highlight) 50%,
+      var(--skeleton-base) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.6s linear infinite;
+  }
+
+  @keyframes skeleton-shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  /* Overlay + panel motion for sheets, dialogs, menus (§7): open/close only,
+     ease-out, within the 120–220ms budget. */
+  .animate-overlay-in {
+    animation: overlay-in var(--motion-slow-ms) ease-out;
+  }
+
+  .animate-sheet-in-left {
+    animation: sheet-in-left var(--motion-slow-ms) ease-out;
+  }
+
+  .animate-menu-in {
+    animation: menu-in var(--motion-base-ms) ease-out;
+  }
+
+  .animate-dialog-in {
+    animation: dialog-in var(--motion-slow-ms) ease-out;
+  }
+
+  @keyframes overlay-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes sheet-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+/* Reduced motion collapses ALL motion to opacity/none — implemented here in the
+   motion utilities, not left to each component (§7). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

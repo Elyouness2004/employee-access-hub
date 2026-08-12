@@ -1,0 +1,178 @@
+# Continuous Delivery — version tags (vX.Y.Z) publish all six images to GHCR,
+# then deploy over SSH: staging automatically, production behind the GitHub
+# environment's approval gate. Deploy jobs are opt-in via repository variables
+# (DEPLOY_STAGING_ENABLED / DEPLOY_PRODUCTION_ENABLED = "true") so the pipeline
+# stays green before any server exists.
+#
+# Server contract (documented in docs/deployment/blue-green.md): the repo is
+# cloned on the host, .env.staging / .env.production are filled there, and
+# docker/scripts/deploy.sh performs the health-gated rollout + smoke test;
+# docker/scripts/rollback.sh restores the previous good tag.
+name: CD
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing image tag to deploy (e.g. v1.2.3)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # keyless cosign signing (OIDC), used by sign-images
+
+jobs:
+  push-images:
+    name: Push image · ${{ matrix.module }}
+    # tag pushes build+push; manual dispatch reuses already-pushed images
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { module: gateway,           context: gateway }
+          - { module: hr-service,        context: services/hr-service }
+          - { module: leave-service,     context: services/leave-service }
+          - { module: expense-service,   context: services/expense-service }
+          - { module: documents-service, context: services/documents-service }
+          - { module: analytics-service, context: services/analytics-service }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}/${{ matrix.module }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+
+  sign-images:
+    name: Sign images (cosign, keyless)
+    needs: [push-images]
+    # opt-in: enable once the org accepts keyless/Sigstore transparency-log
+    # signing. Prepared here so turning it on is a one-variable change.
+    if: github.event_name == 'push' && vars.IMAGE_SIGNING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [gateway, hr-service, leave-service, expense-service, documents-service, analytics-service]
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign the published image (keyless OIDC)
+        env:
+          COSIGN_YES: "true"
+        # signing by digest is the production hardening; resolve it, then sign
+        run: |
+          IMAGE="ghcr.io/${{ github.repository }}/${{ matrix.module }}:${GITHUB_REF_NAME#v}"
+          DIGEST=$(cosign triangulate --type digest "$IMAGE" 2>/dev/null || true)
+          REF=$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          cosign sign --recursive "ghcr.io/${{ github.repository }}/${{ matrix.module }}@${REF}"
+
+  deploy-staging:
+    name: Deploy staging
+    needs: [push-images]
+    # needs.result check lets manual dispatch (which skips push-images) deploy
+    if: >-
+      always() &&
+      vars.DEPLOY_STAGING_ENABLED == 'true' &&
+      (needs.push-images.result == 'success' || needs.push-images.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          RAW: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        # image tags carry no leading v (semver {{version}}), git tags do —
+        # normalize once and derive both forms
+        run: |
+          echo "value=${RAW#v}" >> "$GITHUB_OUTPUT"
+          echo "gitref=v${RAW#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          SSH_HOST: ${{ secrets.STAGING_HOST }}
+          SSH_USER: ${{ secrets.STAGING_USER }}
+          DEPLOY_DIR: ${{ secrets.STAGING_DIR }}
+          TAG: ${{ steps.tag.outputs.value }}
+          GIT_REF: ${{ steps.tag.outputs.gitref }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            "cd '$DEPLOY_DIR' && git fetch --all --tags && git checkout '$GIT_REF' \
+             && bash docker/scripts/deploy.sh --env staging --tag '$TAG'"
+
+  deploy-production:
+    name: Deploy production
+    needs: [deploy-staging]
+    if: >-
+      always() &&
+      vars.DEPLOY_PRODUCTION_ENABLED == 'true' &&
+      needs.deploy-staging.result == 'success'
+    runs-on: ubuntu-latest
+    # protect this environment with required reviewers in repo settings —
+    # that is the manual approval gate between staging and production
+    environment: production
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          RAW: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        # image tags carry no leading v (semver {{version}}), git tags do —
+        # normalize once and derive both forms
+        run: |
+          echo "value=${RAW#v}" >> "$GITHUB_OUTPUT"
+          echo "gitref=v${RAW#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.PRODUCTION_SSH_KEY }}
+          SSH_HOST: ${{ secrets.PRODUCTION_HOST }}
+          SSH_USER: ${{ secrets.PRODUCTION_USER }}
+          DEPLOY_DIR: ${{ secrets.PRODUCTION_DIR }}
+          TAG: ${{ steps.tag.outputs.value }}
+          GIT_REF: ${{ steps.tag.outputs.gitref }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            "cd '$DEPLOY_DIR' && git fetch --all --tags && git checkout '$GIT_REF' \
+             && bash docker/scripts/deploy.sh --env production --tag '$TAG'"

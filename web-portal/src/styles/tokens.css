@@ -1,0 +1,177 @@
+/**
+ * Employee Access Hub — Identity Control Plane design tokens.
+ * Source of truth: docs/frontend/DESIGN-SYSTEM.md §2–§7. These custom properties are the
+ * ONLY colors, radii, shadows, and motion values permitted in the SPA; Tailwind
+ * maps them in tailwind.config.ts and components consume the mapped utilities.
+ *
+ * Both themes ship together: light on :root, dark re-declares the same semantic
+ * names under [data-theme='dark']. Every new token needs light + dark values and
+ * a contrast check (4.5:1 body, 3:1 UI) before merge.
+ *
+ * Every pair is verified by `npm run check:contrast`, which computes the WCAG
+ * ratios straight from this file — jsdom cannot run axe's colour-contrast rule,
+ * so the axe smokes prove structure and that script proves ratios.
+ *
+ *   --border-strong / --action-secondary-border carry the boundary of an
+ *   INTERACTIVE control, so they are held to 1.4.11's 3:1 (they were 1.60:1
+ *   light / 1.81:1 dark before the Phase 6 pass). --border stays low-contrast
+ *   on purpose: it separates rows and panels, which is decoration, not a
+ *   control boundary.
+ *
+ * Tokens added beyond DESIGN-SYSTEM §2 (each with light+dark values, noted in
+ * the Phase 1 report): --overlay (sheet/dialog scrim), --action-destructive-text
+ * (text on solid destructive), --radius-full (named for completeness).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* §2.1 Neutrals — surfaces, text, borders */
+  --canvas: #f7f8f8;
+  --surface: #ffffff;
+  --surface-2: #f2f3f4;
+  --surface-raised: #ffffff;
+  --surface-hover: #eef0f1;
+  --surface-active: #e8eaec;
+  --sidebar-surface: #16181b;
+  --sidebar-hover: #212428;
+  --sidebar-active: #2a2e33;
+  --sidebar-text: #c9cdd2;
+  --sidebar-text-strong: #f2f3f4;
+  --sidebar-text-muted: #868d95;
+  --text-strong: #14171a;
+  --text: #343a41;
+  --text-muted: #5c636b;
+  --text-disabled: #9aa1a8;
+  --border: #e3e5e8;
+  --border-strong: #868d95;
+  --focus-ring: #14171a;
+  --overlay: rgb(20 23 26 / 0.4);
+
+  /* §2.2 Actions — the primary is graphite, never blue */
+  --action-primary: #1a1d21;
+  --action-primary-hover: #2a2e33;
+  --action-primary-text: #ffffff;
+  --action-secondary-border: #868d95;
+  --action-destructive: #b42318;
+  --action-destructive-hover: #912018;
+  --action-destructive-text: #ffffff;
+  --link: #14171a;
+
+  /* §2.3 Status colors — the only saturation in the product */
+  --status-success-text: #067647;
+  --status-success-bg: #ecfdf3;
+  --status-success-border: #abefc6;
+  --status-warning-text: #b54708;
+  --status-warning-bg: #fffaeb;
+  --status-warning-border: #fedf89;
+  --status-danger-text: #b42318;
+  --status-danger-bg: #fef3f2;
+  --status-danger-border: #fecdca;
+  --status-info-text: #175cd3;
+  --status-info-bg: #eff4ff;
+  --status-info-border: #b2ccff;
+  --status-neutral-text: #5c636b;
+  --status-neutral-bg: #f2f3f4;
+  --status-neutral-border: #e3e5e8;
+
+  /* §2.5 Chart colors — monochrome-first */
+  --chart-1: #383e45;
+  --chart-2: #7d8899;
+  --chart-3: #5b7da8;
+  --chart-4: #5f9077;
+  --chart-grid: #eef0f1;
+
+  /* §2.6 Skeleton */
+  --skeleton-base: #eef0f1;
+  --skeleton-highlight: #f7f8f8;
+
+  /* §3 Typography — two families, loaded locally (no CDN) */
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+
+  /* §5 Radius — nothing larger than 8px, ever */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  /* §5 Shadows — --shadow-md is the heaviest allowed */
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.04);
+  --shadow-sm: 0 1px 3px rgb(16 24 40 / 0.07);
+  --shadow-md: 0 4px 16px rgb(16 24 40 / 0.1);
+
+  /* §7 Motion — 120–220ms ease-out, state changes only */
+  --motion-fast-ms: 120ms;
+  --motion-base-ms: 160ms;
+  --motion-slow-ms: 220ms;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  /* §2.1 Neutrals */
+  --canvas: #0e1012;
+  --surface: #16181b;
+  --surface-2: #1c1f22;
+  --surface-raised: #1c1f22;
+  --surface-hover: #22262a;
+  --surface-active: #292e33;
+  --sidebar-surface: #101214;
+  --sidebar-hover: #191c1f;
+  --sidebar-active: #23272b;
+  --sidebar-text: #c9cdd2;
+  --sidebar-text-strong: #f2f3f4;
+  --sidebar-text-muted: #7a828a;
+  --text-strong: #f4f5f6;
+  --text: #d5d8dc;
+  --text-muted: #9aa1a8;
+  --text-disabled: #5f666d;
+  --border: #2a2e33;
+  --border-strong: #666e76;
+  --focus-ring: #f4f5f6;
+  --overlay: rgb(0 0 0 / 0.55);
+
+  /* §2.2 Actions — primary inverts to near-white on dark */
+  --action-primary: #f2f3f4;
+  --action-primary-hover: #e0e2e5;
+  --action-primary-text: #14171a;
+  --action-secondary-border: #666e76;
+  --action-destructive: #f97066;
+  --action-destructive-hover: #fda29b;
+  --action-destructive-text: #14171a;
+  --link: #f4f5f6;
+
+  /* §2.3 Status colors */
+  --status-success-text: #75e0a7;
+  --status-success-bg: #053321;
+  --status-success-border: #085d3a;
+  --status-warning-text: #fec84b;
+  --status-warning-bg: #4e1d09;
+  --status-warning-border: #93370d;
+  --status-danger-text: #f97066;
+  --status-danger-bg: #55160c;
+  --status-danger-border: #912018;
+  --status-info-text: #84adff;
+  --status-info-bg: #102a56;
+  --status-info-border: #1849a9;
+  --status-neutral-text: #9aa1a8;
+  --status-neutral-bg: #1c1f22;
+  --status-neutral-border: #2a2e33;
+
+  /* §2.5 Chart colors */
+  --chart-1: #d5d8dc;
+  --chart-2: #667085;
+  --chart-3: #84adff;
+  --chart-4: #75e0a7;
+  --chart-grid: #22262a;
+
+  /* §2.6 Skeleton */
+  --skeleton-base: #22262a;
+  --skeleton-highlight: #292e33;
+
+  /* Shadows carry more weight on dark surfaces */
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.25);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 4px 16px rgb(0 0 0 / 0.45);
+}

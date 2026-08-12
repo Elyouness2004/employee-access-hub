@@ -1,0 +1,8 @@
+package com.hub.expense.infrastructure;
+
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface AuditLogRepository extends JpaRepository<AuditLogEntry, UUID> {
+}

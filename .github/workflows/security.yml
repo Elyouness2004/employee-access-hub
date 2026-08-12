@@ -1,0 +1,117 @@
+# DevSecOps scanning — all free/OSS, no paid services. Runs on push/PR to main,
+# on a weekly schedule (catch newly-disclosed CVEs in unchanged code), and on
+# demand. Findings are uploaded as SARIF so they surface in the repo's Security
+# tab. Secret scanning fails the build; vulnerability scans report (audit mode)
+# rather than blocking the merge on a transitive CVE nobody can fix same-day.
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'   # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # upload SARIF to the Security tab
+
+jobs:
+  secret-scan:
+    name: Secret scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Gitleaks scans full history on push
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  dependency-scan:
+    name: Dependency & config scan (Trivy fs)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Trivy filesystem scan (vuln + misconfig + secret)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,misconfig,secret
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '0'   # audit-mode: report, don't block on transitive CVEs
+      - name: Upload Trivy fs SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  image-scan:
+    name: Image scan (Trivy) · ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { module: gateway,           context: gateway }
+          - { module: hr-service,        context: services/hr-service }
+          - { module: leave-service,     context: services/leave-service }
+          - { module: expense-service,   context: services/expense-service }
+          - { module: documents-service, context: services/documents-service }
+          - { module: analytics-service, context: services/analytics-service }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t "${{ matrix.module }}:scan" "${{ matrix.context }}"
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: "${{ matrix.module }}:scan"
+          format: sarif
+          output: "trivy-${{ matrix.module }}.sarif"
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+      - name: Upload image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-${{ matrix.module }}.sarif"
+          category: "trivy-image-${{ matrix.module }}"
+
+  sbom:
+    name: SBOM (CycloneDX)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Java 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      # the cyclonedx-maven-plugin is bound to package in every module pom;
+      # -DskipTests keeps this fast (SBOM is about dependencies, not tests)
+      - name: Generate SBOMs
+        run: ./mvnw -B -ntp -DskipTests package
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: |
+            gateway/target/bom.json
+            gateway/target/bom.xml
+            services/*/target/bom.json
+            services/*/target/bom.xml
+          retention-days: 90

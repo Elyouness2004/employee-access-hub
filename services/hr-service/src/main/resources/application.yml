@@ -1,0 +1,125 @@
+server:
+  port: 9001
+
+spring:
+  application:
+    name: hr-service
+  # trace context propagates across RabbitMQ (Phase 7); no effect until the
+  # broker adapter is enabled (hub.events.rabbit.enabled)
+  rabbitmq:
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        observation-enabled: true
+  datasource:
+    # H2 in PostgreSQL mode by default so `mvnw test` and e2e-local.sh work
+    # without Docker; compose overrides these with the real PostgreSQL.
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:hr;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # Flyway owns the schema; Hibernate only checks the mapping against it
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: hr
+  flyway:
+    create-schemas: true
+    default-schema: hr
+    schemas: hr
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # issuer as it appears in tokens (host-facing URL)
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/employee-hub}
+          # optional override for container networking (keys fetched internally,
+          # issuer claim still validated against issuer-uri)
+          jwk-set-uri: ${KEYCLOAK_JWKS_URI:}
+  cloud:
+    openfeign:
+      client:
+        config:
+          # offboarding fan-out targets (P3.3): short timeouts, best-effort
+          leave-offboarding: {connect-timeout: 2000, read-timeout: 2000}
+          expense-offboarding: {connect-timeout: 2000, read-timeout: 2000}
+          documents-offboarding: {connect-timeout: 2000, read-timeout: 2000}
+
+hub:
+  security:
+    audience: hub-api
+  # offboarding fan-out targets; compose overrides with the internal hostnames
+  leave:
+    base-url: ${LEAVE_SERVICE_URI:http://localhost:9002}
+  expense:
+    base-url: ${EXPENSE_SERVICE_URI:http://localhost:9003}
+  documents:
+    base-url: ${DOCUMENTS_SERVICE_URI:http://localhost:9004}
+  offboarding:
+    circuit-breaker:
+      sliding-window-size: 10
+      minimum-number-of-calls: 4
+      failure-rate-threshold: 50
+      wait-duration-in-open-state: 10s
+  # Identity lifecycle (E04). The real Keycloak Admin adapter is OFF by default so
+  # the service runs and every test passes without a Keycloak instance; enable it
+  # (with a least-privilege service account) in compose/production.
+  identity:
+    keycloak:
+      enabled: ${HUB_IDENTITY_KEYCLOAK_ENABLED:false}
+      server-url: ${KEYCLOAK_SERVER_URL:http://keycloak:8080}
+      realm: ${KEYCLOAK_REALM:employee-hub}
+      # hr-provisioner is declared IN employee-hub by the realm export, so its
+      # token comes from there. The old `master` default could only ever fail
+      # with invalid_client — it was half of Gap 2.
+      token-realm: ${KEYCLOAK_TOKEN_REALM:employee-hub}
+      client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:hr-provisioner}
+      client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:}
+  # Account activation / password reset: Keycloak's own execute-actions-email.
+  # No password is generated, returned or logged by this service — the employee
+  # sets their own through Keycloak's form. An undeliverable e-mail is reported
+  # (activationEmailSent=false), never fatal: the required action is already set.
+  activation:
+    enabled: ${HUB_IDENTITY_ACTIVATION_ENABLED:true}
+    client-id: ${HUB_IDENTITY_ACTIVATION_CLIENT_ID:web-portal}
+    redirect-uri: ${HUB_IDENTITY_ACTIVATION_REDIRECT_URI:}
+    lifespan-seconds: ${HUB_IDENTITY_ACTIVATION_LIFESPAN_SECONDS:43200}
+  # Event fabric (Part 4). Events are always written to the outbox; the relay and
+  # the RabbitMQ adapter are OFF by default (the outbox is the inspectable trail).
+  events:
+    relay:
+      enabled: ${HUB_EVENTS_RELAY_ENABLED:false}
+      interval-ms: 5000
+      batch-size: 100
+    rabbit:
+      enabled: ${HUB_EVENTS_RABBIT_ENABLED:false}
+      exchange: employee.events
+
+management:
+  # per-service tag so Prometheus/Grafana can slice metrics by application
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  # Distributed tracing (Phase 7). Sampling defaults to 0.0 so tests and the dev
+  # stack create/export nothing; the observability overlay and staging/production
+  # raise it and point OTLP at Tempo.
+  tracing:
+    sampling:
+      probability: ${HUB_TRACING_SAMPLING:0.0}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  endpoints:
+    web:
+      exposure:
+        # prometheus + metrics scraped on the backend network only (not routed
+        # by the gateway, not publicly reachable)
+        include: health,info,prometheus,metrics
+  health:
+    # the AMQP starter is on the classpath for the gated adapter; never probe a
+    # broker that is not configured (would make /actuator/health flap)
+    rabbit:
+      enabled: false

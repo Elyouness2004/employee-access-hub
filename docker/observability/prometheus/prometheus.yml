@@ -1,0 +1,42 @@
+# Prometheus scrape config for the Employee Access Hub observability stack.
+# Prometheus sits on the backend network so it can reach every service's
+# actuator endpoint directly; nothing here is publicly exposed.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    stack: employee-access-hub
+
+scrape_configs:
+  # The six Spring Boot apps expose Micrometer metrics at /actuator/prometheus
+  # (JVM, http.server.requests = RED, HikariCP = DB pool, gateway routes, and
+  # the hr business gauges). Each metric already carries an `application` tag.
+  - job_name: spring-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['gateway:8080']
+        labels: {application: gateway}
+      - targets: ['hr-service:9001']
+        labels: {application: hr-service}
+      - targets: ['leave-service:9002']
+        labels: {application: leave-service}
+      - targets: ['expense-service:9003']
+        labels: {application: expense-service}
+      - targets: ['documents-service:9004']
+        labels: {application: documents-service}
+      - targets: ['analytics-service:9005']
+        labels: {application: analytics-service}
+
+  # RabbitMQ ships the prometheus plugin in the management image (port 15692).
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ['rabbitmq:15692']
+
+  # Server-side PostgreSQL metrics via postgres_exporter (observability overlay).
+  - job_name: postgres
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']

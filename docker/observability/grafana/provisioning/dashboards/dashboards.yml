@@ -1,0 +1,15 @@
+# Grafana dashboard provider: loads the JSON dashboards baked into the image
+# read-only mount at /var/lib/grafana/dashboards.
+apiVersion: 1
+
+providers:
+  - name: employee-access-hub
+    orgId: 1
+    folder: Employee Access Hub
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

@@ -1,0 +1,27 @@
+# Gitleaks configuration — extends the built-in ruleset and allowlists the
+# project's DOCUMENTED dev-only seeds so the secret-scan gate fails on real
+# secrets while not tripping on committed placeholders. The allowlist is tightly
+# scoped by path + literal so a genuine credential in any other file still trips.
+title = "Employee Access Hub — gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented dev-only seeds and placeholder env contracts (never real secrets)"
+# these files intentionally contain placeholders or dev-seed values
+paths = [
+  '''\.env\.example''',
+  '''\.env\.staging\.example''',
+  '''\.env\.production\.example''',
+  '''keycloak-config/realm-employee-hub\.json''',
+  '''keycloak-config/README\.md''',
+  '''docker/scripts/smoke-test\.sh''',
+  '''docker/scripts/e2e-local\.sh''',
+]
+# and these literal seed values are safe anywhere they appear
+regexes = [
+  '''change-me''',
+  '''Test1234!''',
+  '''admin-local-only''',
+]

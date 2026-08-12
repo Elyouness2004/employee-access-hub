@@ -1,0 +1,57 @@
+# Production overlay — apply on top of the base file with the production env:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.production.yml \
+#     --env-file .env.production up -d --no-build
+# Images always come from the registry (no local builds in production), every
+# service runs the production Spring profile, and Keycloak runs in production
+# mode. GATEWAY_PORT is parametrized for the blue/green scheme
+# (docs/deployment/blue-green.md): blue 8080, green 8082, proxy switches.
+name: employee-access-hub-production
+
+services:
+  keycloak:
+    # production-mode server (start, not start-dev); HTTP stays enabled because
+    # TLS terminates at the reverse proxy (Phase 9), which sets X-Forwarded-*
+    command: ["start", "--import-realm", "--http-enabled=true", "--proxy-headers=xforwarded"]
+    environment:
+      KC_HOSTNAME: ${KC_HOSTNAME:?set in .env.production}
+    ports: !override
+      - "${KEYCLOAK_PORT:-8081}:8080"
+
+  hr-service:
+    image: ${IMAGE_REGISTRY:?set in .env.production}/hr-service:${IMAGE_TAG:?set in .env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+    stop_grace_period: 30s
+
+  leave-service:
+    image: ${IMAGE_REGISTRY:?set in .env.production}/leave-service:${IMAGE_TAG:?set in .env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+    stop_grace_period: 30s
+
+  expense-service:
+    image: ${IMAGE_REGISTRY:?set in .env.production}/expense-service:${IMAGE_TAG:?set in .env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+    stop_grace_period: 30s
+
+  documents-service:
+    image: ${IMAGE_REGISTRY:?set in .env.production}/documents-service:${IMAGE_TAG:?set in .env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+    stop_grace_period: 30s
+
+  analytics-service:
+    image: ${IMAGE_REGISTRY:?set in .env.production}/analytics-service:${IMAGE_TAG:?set in .env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+    stop_grace_period: 30s
+
+  gateway:
+    image: ${IMAGE_REGISTRY:?set in .env.production}/gateway:${IMAGE_TAG:?set in .env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      HUB_CORS_ALLOWED_ORIGINS: ${HUB_CORS_ALLOWED_ORIGINS:?set in .env.production}
+    ports: !override
+      - "${GATEWAY_PORT:-8080}:8080"
+    stop_grace_period: 30s

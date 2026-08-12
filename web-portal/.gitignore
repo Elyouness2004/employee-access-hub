@@ -1,0 +1,13 @@
+# Dependencies & build output
+node_modules/
+dist/
+coverage/
+
+# Local-only environment overrides (checked-in .env.development/.env.test hold
+# public dev defaults only — never secrets)
+.env.local
+.env.*.local
+
+# Editor/tooling noise
+*.tsbuildinfo
+.DS_Store

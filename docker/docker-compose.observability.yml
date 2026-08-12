@@ -1,0 +1,164 @@
+# Observability overlay — Prometheus + Grafana + exporters. Apply on top of the
+# base stack:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.observability.yml \
+#     --env-file .env up -d
+# Phase 5 adds metrics (this file); Phase 6 appends Loki + Promtail and Phase 7
+# appends Tempo to the same overlay. Prometheus sits on the backend network to
+# scrape the services directly; only Grafana is published to the host.
+
+# Turns on span export for the services when the observability stack is running
+# (base default is off, so tests/plain dev create no spans).
+x-tracing-env: &tracing-env
+  HUB_TRACING_SAMPLING: "1.0"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo:4318/v1/traces"
+
+networks:
+  observability:
+
+volumes:
+  prometheusdata:
+  grafanadata:
+  lokidata:
+  tempodata:
+
+services:
+  # enable tracing export on each service (merged onto the base definitions)
+  gateway:
+    environment: *tracing-env
+  hr-service:
+    environment: *tracing-env
+  leave-service:
+    environment: *tracing-env
+  expense-service:
+    environment: *tracing-env
+  documents-service:
+    environment: *tracing-env
+  analytics-service:
+    environment: *tracing-env
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver   # Tempo metrics-generator writes span metrics here
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheusdata:/prometheus
+    networks: [backend, observability]   # backend: scrape services; obs: serve Grafana
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks: [observability]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+
+  # Centralized logging (Phase 6): Loki stores logs, Promtail ships every
+  # container's logs to it.
+  loki:
+    image: grafana/loki:3.3.2
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - lokidata:/loki
+    networks: [observability]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    command: ["-config.file=/etc/promtail/promtail-config.yml"]
+    volumes:
+      - ./observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      # read-only access to discover containers and read their logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks: [observability]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.5
+    depends_on:
+      loki:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Distributed tracing backend (Phase 7): receives OTLP spans from the services.
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo/tempo-config.yml"]
+    volumes:
+      - ./observability/tempo/tempo-config.yml:/etc/tempo/tempo-config.yml:ro
+      - tempodata:/var/tempo
+    networks: [backend, observability]   # backend: receive spans; obs: serve Grafana
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3200/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # Server-side PostgreSQL metrics (the app-side HikariCP pool metrics come from
+  # each service's /actuator/prometheus).
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-keycloak}:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/${POSTGRES_DB:-keycloak}?sslmode=disable"
+    networks: [backend, observability]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 0.5
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped

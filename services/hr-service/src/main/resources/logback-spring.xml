@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Logging config for the Employee Access Hub (Phase 6). Identical across the
+  independently deployable modules (generated from one template).
+    * default / dev / test  -> human-readable console with correlation + trace ids
+    * staging, production    -> single-line JSON (Logstash encoder) for Loki ingest
+  Both appenders apply the SAME sensitive-data masking (single ${HUB_MASK_REGEX}
+  source): a stray log of a password / token / secret / authorization value is
+  redacted before it is ever written. correlationId comes from the gateway
+  (Phase 1); traceId / spanId are populated once tracing is on (Phase 7).
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="unknown"/>
+
+    <!-- masks key=value / key: value for known secret-bearing keys -->
+    <property name="HUB_MASK_REGEX"
+              value="(?i)(password|passwd|pwd|secret|token|authorization|client[_-]?secret|api[_-]?key)([=:]\s*)(\S+)"/>
+
+    <springProfile name="staging | production">
+        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeMdcKeyName>correlationId</includeMdcKeyName>
+                <includeMdcKeyName>traceId</includeMdcKeyName>
+                <includeMdcKeyName>spanId</includeMdcKeyName>
+                <customFields>{"application":"${APP_NAME}"}</customFields>
+                <jsonGeneratorDecorator class="net.logstash.logback.mask.MaskingJsonGeneratorDecorator">
+                    <valueMask>
+                        <value>${HUB_MASK_REGEX}</value>
+                        <mask>$1$2****</mask>
+                    </valueMask>
+                </jsonGeneratorDecorator>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+    </springProfile>
+
+    <springProfile name="!staging &amp; !production">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [${APP_NAME},%X{correlationId:-},%X{traceId:-},%X{spanId:-}] %-40.40logger{39} : %replace(%m){'${HUB_MASK_REGEX}','$1$2****'}%n%wEx</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+</configuration>

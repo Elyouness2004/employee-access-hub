@@ -1,0 +1,41 @@
+# Staging profile (SPRING_PROFILES_ACTIVE=staging): operational behavior only —
+# graceful shutdown, fail-fast datasource, verbose hub logging for pre-production debugging.
+# The datasource keys lose their H2 fallback on purpose: this environment must
+# fail fast when the real PostgreSQL is not configured, never silently boot on
+# an in-memory database. Business config stays in application.yml.
+server:
+  shutdown: graceful
+  # bounded worker pool sized for a small single-VM deployment
+  tomcat:
+    threads:
+      max: 100
+      min-spare: 10
+    accept-count: 100
+    max-connections: 2000
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    # pool sized so all services + Keycloak stay well under PostgreSQL
+    # max_connections (100); short acquire timeout fails fast under load
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 3000
+      max-lifetime: 1800000
+      keepalive-time: 300000
+
+logging:
+  level:
+    root: INFO
+    com.hub: DEBUG
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true

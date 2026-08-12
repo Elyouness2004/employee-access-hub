@@ -1,0 +1,356 @@
+{
+  "realm": "employee-hub",
+  "enabled": true,
+  "displayName": "Employee Access Hub",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "rememberMe": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 28800,
+  "offlineSessionIdleTimeout": 2592000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "eventsEnabled": true,
+  "eventsListeners": [
+    "jboss-logging"
+  ],
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyDigits": 6,
+  "otpPolicyPeriod": 30,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyCodeReusable": false,
+  "otpSupportedApplications": [
+    "totpAppFreeOTPName",
+    "totpAppGoogleName",
+    "totpAppMicrosoftAuthenticatorName"
+  ],
+  "attributes": {
+    "//": "Browser-facing base URL. Without it Keycloak builds links from the request Host header, so the password-reset action token mailed on hr-service's behalf came out as http://keycloak:8080/... — unresolvable from a browser. docker-compose.yml supplies it; the default is EMPTY on purpose, because a hard-coded value would override the random port Testcontainers publishes and break the real-Keycloak e2e test.",
+    "frontendUrl": "${KC_FRONTEND_URL:}"
+  },
+  "smtpServer": {
+    "host": "${KC_SMTP_HOST:mailpit}",
+    "port": "${KC_SMTP_PORT:1025}",
+    "from": "${KC_SMTP_FROM:no-reply@hub.local}",
+    "fromDisplayName": "${KC_SMTP_FROM_DISPLAY_NAME:Employee Access Hub}",
+    "replyTo": "${KC_SMTP_REPLY_TO:no-reply@hub.local}",
+    "ssl": "${KC_SMTP_SSL:false}",
+    "starttls": "${KC_SMTP_STARTTLS:false}",
+    "auth": "${KC_SMTP_AUTH:false}",
+    "user": "${KC_SMTP_USER:}",
+    "password": "${KC_SMTP_PASSWORD:}"
+  },
+  "roles": {
+    "realm": [
+      {
+        "name": "EMPLOYEE",
+        "description": "Base role: every authenticated employee"
+      },
+      {
+        "name": "MANAGER",
+        "description": "Approves team requests; composite of EMPLOYEE",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "EMPLOYEE"
+          ]
+        }
+      },
+      {
+        "name": "HR",
+        "description": "Manages workforce data; composite of EMPLOYEE",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "EMPLOYEE"
+          ]
+        }
+      },
+      {
+        "name": "ADMIN",
+        "description": "Manages identities and platform; composite of EMPLOYEE",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "EMPLOYEE"
+          ]
+        }
+      }
+    ]
+  },
+  "clientScopes": [
+    {
+      "name": "roles",
+      "description": "Realm roles in realm_access.roles (built-in equivalent; defined explicitly because an import with a clientScopes array does not auto-create built-ins)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "foo",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "Username claim (built-in equivalent, minimal)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "basic",
+      "description": "Subject claim (built-in equivalent; KC 24+ ships sub via this scope)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hub-api",
+      "description": "Adds the hub-api audience expected by the gateway and all resource servers",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "hub-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "hub-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "web-portal",
+      "name": "Employee Access Hub \u2014 Web Portal",
+      "description": "Single entry SPA for all applications. OIDC Authorization Code + PKCE.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "/",
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": [
+        "roles",
+        "profile",
+        "basic",
+        "hub-api"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "test-cli",
+      "name": "TEST/DEV ONLY \u2014 direct-grant client for automated tests",
+      "description": "Password grant (Resource Owner) used exclusively by tests and smoke scripts. Must not exist in a production realm.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [],
+      "webOrigins": [],
+      "defaultClientScopes": [
+        "roles",
+        "profile",
+        "basic",
+        "hub-api"
+      ],
+      "optionalClientScopes": []
+    },
+    {
+      "clientId": "hr-provisioner",
+      "name": "HR identity provisioning service account",
+      "description": "Client-credentials service account for hr-service identity provisioning (FR-12). Least privilege: manage-users, view-users, view-realm. No hub-api scope, no browser or direct-grant flow. See keycloak-config/README.md.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": true,
+      "secret": "${KEYCLOAK_ADMIN_CLIENT_SECRET}",
+      "redirectUris": [],
+      "webOrigins": [],
+      "defaultClientScopes": [
+        "basic",
+        "roles"
+      ],
+      "optionalClientScopes": []
+    }
+  ],
+  "users": [
+    {
+      "username": "service-account-hr-provisioner",
+      "enabled": true,
+      "serviceAccountClientId": "hr-provisioner",
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users",
+          "view-realm"
+        ]
+      }
+    },
+    {
+      "username": "alice.employee",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Employee",
+      "email": "alice.employee@hub.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "EMPLOYEE"
+      ]
+    },
+    {
+      "username": "mark.manager",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Mark",
+      "lastName": "Manager",
+      "email": "mark.manager@hub.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "MANAGER"
+      ]
+    },
+    {
+      "username": "hana.hr",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Hana",
+      "lastName": "Hr",
+      "email": "hana.hr@hub.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "HR"
+      ]
+    },
+    {
+      "username": "adam.admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Adam",
+      "lastName": "Admin",
+      "email": "adam.admin@hub.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "Test1234!",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ADMIN"
+      ]
+    }
+  ]
+}

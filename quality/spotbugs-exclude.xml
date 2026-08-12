@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Shared SpotBugs exclusion filter (referenced from each pom).
+    Every entry must carry a justification comment; an empty filter means no
+    finding is currently accepted — the gate runs at full strength.
+-->
+<FindBugsFilter>
+    <!-- EI_EXPOSE_REP/EI_EXPOSE_REP2: JPA entities and Spring-managed DTOs
+         intentionally hand out references (collections, dates) — the layered
+         architecture already bounds who can touch them; wrapping every accessor
+         in defensive copies would fight the existing conventions. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!-- RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE: resilience4j's
+         CircuitBreaker.executeSupplier is typed as @NonNull-returning, but the
+         resilience adapters deliberately return null from the wrapped supplier
+         to model a 404 ("no such record" is an answer, not a breaker-tripping
+         failure). The null check that follows is therefore REQUIRED, not
+         redundant — SpotBugs cannot see through the lambda. Scoped to the three
+         adapter classes that use this pattern; removing the check would NPE. -->
+    <Match>
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
+        <Or>
+            <Class name="~.*\.infrastructure\.HrEmployeeDirectory"/>
+            <Class name="~.*\.infrastructure\.ResilientMetricsSource"/>
+        </Or>
+    </Match>
+</FindBugsFilter>

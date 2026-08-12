@@ -1,0 +1,57 @@
+# Staging overlay — apply on top of the base file with the staging env:
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.staging.yml \
+#     --env-file .env.staging up -d
+# Mirrors production behavior (production-mode Keycloak, staging Spring profile,
+# fail-fast datasources) while defaulting to locally built images, so a staging
+# stack can run with or without a registry. Host ports are shifted (+10) so
+# staging can co-exist with production on the same VM.
+name: employee-access-hub-staging
+
+services:
+  keycloak:
+    # production-mode server (start, not start-dev); HTTP stays enabled because
+    # TLS terminates at the reverse proxy (Phase 9), which sets X-Forwarded-*
+    command: ["start", "--import-realm", "--http-enabled=true", "--proxy-headers=xforwarded"]
+    environment:
+      KC_HOSTNAME: ${KC_HOSTNAME:?set in .env.staging}
+    ports: !override
+      - "${KEYCLOAK_PORT:-8091}:8080"
+
+  hr-service:
+    image: ${IMAGE_REGISTRY:-local}/hr-service:${IMAGE_TAG:-staging}
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+    stop_grace_period: 30s
+
+  leave-service:
+    image: ${IMAGE_REGISTRY:-local}/leave-service:${IMAGE_TAG:-staging}
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+    stop_grace_period: 30s
+
+  expense-service:
+    image: ${IMAGE_REGISTRY:-local}/expense-service:${IMAGE_TAG:-staging}
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+    stop_grace_period: 30s
+
+  documents-service:
+    image: ${IMAGE_REGISTRY:-local}/documents-service:${IMAGE_TAG:-staging}
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+    stop_grace_period: 30s
+
+  analytics-service:
+    image: ${IMAGE_REGISTRY:-local}/analytics-service:${IMAGE_TAG:-staging}
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+    stop_grace_period: 30s
+
+  gateway:
+    image: ${IMAGE_REGISTRY:-local}/gateway:${IMAGE_TAG:-staging}
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      HUB_CORS_ALLOWED_ORIGINS: ${HUB_CORS_ALLOWED_ORIGINS:?set in .env.staging}
+    ports: !override
+      - "${GATEWAY_PORT:-8090}:8080"
+    stop_grace_period: 30s

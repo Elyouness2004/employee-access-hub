@@ -1,0 +1,50 @@
+# Edge overlay (Phase 9): puts nginx in front as the ONLY public entry — TLS
+# termination, rate limiting, security headers, compression, request/upload
+# limits. Apply on top of the base + a target overlay, e.g. production:
+#   docker compose -f docker/docker-compose.yml \
+#     -f docker/docker-compose.production.yml \
+#     -f docker/docker-compose.edge.yml --env-file .env.production up -d
+# Generate certs first (dev: docker/nginx/generate-dev-certs.sh; prod: certbot).
+
+volumes:
+  certbotwww:
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    environment:
+      NGINX_API_HOST: ${NGINX_API_HOST:?set in .env}
+      NGINX_AUTH_HOST: ${NGINX_AUTH_HOST:?set in .env}
+      # only substitute our NGINX_* vars in templates; leave $host/$scheme alone
+      NGINX_ENVSUBST_FILTER: "^NGINX_"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - certbotwww:/var/www/certbot
+    ports:
+      - "80:80"
+      - "443:443"
+    networks: [edge, backend]   # edge: public; backend: reach gateway + keycloak
+    # master binds 80/443 as root then drops to the nginx user for workers
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE, CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 128m
+    cpus: 1.0
+    depends_on:
+      gateway:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--no-check-certificate", "https://localhost/v3/api-docs"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+
+  # gateway is no longer published to the host — nginx is the only public entry
+  gateway:
+    ports: !override []
