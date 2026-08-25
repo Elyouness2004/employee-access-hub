@@ -2,8 +2,7 @@
 
 This document describes the security posture of the Employee Access Hub and how
 secrets, scanning, and the supply chain are handled. It complements the
-architectural zero-trust design in [Architecture.md](docs/architecture/Architecture.md); the deep
-supply-chain detail lives in [docs/security/supply-chain.md](docs/security/supply-chain.md).
+architectural zero-trust
 
 ## Reporting a vulnerability
 
